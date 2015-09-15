@@ -21,7 +21,9 @@ NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_dist
 	_triggerOutput = portOutputRegister(digitalPinToPort(trigger_pin)); // Get the output port register for the trigger pin.
 	_echoInput = portInputRegister(digitalPinToPort(echo_pin));         // Get the input port register for the echo pin.
 
+#ifndef ARDUINO_SAM_DUE
 	_triggerMode = (uint8_t *) portModeRegister(digitalPinToPort(trigger_pin)); // Get the port mode register for the trigger pin.
+#endif
 
 #if ROUNDING_ENABLED == false
 	_maxEchoTime = min(max_cm_distance + 1, MAX_SENSOR_DISTANCE + 1) * US_ROUNDTRIP_CM; // Calculate the maximum distance in uS (no rounding).
@@ -35,7 +37,11 @@ NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_dist
 	pinMode(trigger_pin, OUTPUT); // Set trigger pin to output (on Teensy 3.x (ARM), pins default to disabled, at least one pinMode() is needed for GPIO mode).
 #endif
 
-#if ONE_PIN_ENABLED != true
+#if defined (ARDUINO_AVR_YUN)
+	pinMode(echo_pin, INPUT);     // Set echo pin to input on the Arduino Yun.
+#endif
+
+#if ONE_PIN_ENABLED != true && !defined (ARDUINO_SAM_DUE)
 	*_triggerMode |= _triggerBit; // Set trigger pin to output.
 #endif
 }
@@ -131,9 +137,14 @@ void NewPing::ping_interrupt2() {
 // Standard and timer interrupt ping method support function (not called directly)
 // ---------------------------------------------------------------------------
 
-boolean NewPing::ping_trigger(boolean interrupt) {
+//boolean NewPing::ping_trigger(boolean interrupt) {
+boolean NewPing::ping_trigger() {
 #if ONE_PIN_ENABLED == true
+#if defined (ARDUINO_SAM_DUE)
+	pinMode(_triggerPin, OUTPUT);
+#else
 	*_triggerMode |= _triggerBit; // Set trigger pin to output.
+#endif
 #endif
 
 	*_triggerOutput &= ~_triggerBit; // Set the trigger pin low, should already be low, but this will make sure it is.
@@ -143,10 +154,14 @@ boolean NewPing::ping_trigger(boolean interrupt) {
 	*_triggerOutput &= ~_triggerBit; // Set trigger pin back to low.
 
 #if ONE_PIN_ENABLED == true
+#if defined (ARDUINO_SAM_DUE)
+	pinMode(_triggerPin, INPUT);
+#else
 	*_triggerMode &= ~_triggerBit; // Set trigger pin to input (when using one Arduino pin this is technically setting the echo pin to input as both are tied to the same Arduino pin).
 #endif
+#endif
 
-	if (interrupt) return true;
+//	if (interrupt) return true;
 
 #if URM37_ENABLED == true
 	if (!(*_echoInput & _echoBit)) return false;            // Previuos ping hasn't finished, abort.
@@ -227,6 +242,10 @@ void NewPing::timer_us(unsigned int frequency, void (*userFunc)(void)) {
 	TIMSK4 = (1<<TOIE4);                  // Enable Timer4 interrupt.
 #elif defined (__arm__) && defined (TEENSYDUINO) // Timer for Teensy 3.x
 	itimer.begin(userFunc, frequency);             // Really simple on the Teensy 3.x, calls userFunc every 'frequency' uS.
+/*
+#elif (ARDUINO_SAM_DUE)
+	Timer3.attachInterrupt(userFunc).setFrequency(frequency).start();
+*/
 #else
 	OCR2A = min((frequency>>2) - 1, 255); // Every count is 4uS, so divide by 4 (bitwise shift right 2) subtract one, then make sure we don't go over 255 limit.
 	TIMSK2 |= (1<<OCIE2A);                // Enable Timer2 interrupt.
@@ -245,6 +264,10 @@ void NewPing::timer_ms(unsigned long frequency, void (*userFunc)(void)) {
 	TIMSK4 = (1<<TOIE4);   // Enable Timer4 interrupt.
 #elif defined (__arm__) && defined (TEENSYDUINO) // Timer for Teensy 3.x
 	itimer.begin(NewPing::timer_ms_cntdwn, 1000);  // Set timer to 1ms (1000 uS).
+/*
+#elif (ARDUINO_SAM_DUE)
+	Timer3.attachInterrupt(NewPing::timer_ms_cntdwn).setFrequency(1000).start();
+*/
 #else
 	OCR2A = 249;           // Every count is 4uS, so 1ms = 250 counts - 1.
 	TIMSK2 |= (1<<OCIE2A); // Enable Timer2 interrupt.
@@ -257,6 +280,10 @@ void NewPing::timer_stop() { // Disable timer interrupt.
 	TIMSK4 = 0;
 #elif defined (__arm__) && defined (TEENSYDUINO) // Timer for Teensy 3.x
 	itimer.end();
+/*
+#elif (ARDUINO_SAM_DUE)
+	Timer3.stop();
+*/
 #else
 	TIMSK2 &= ~(1<<OCIE2A);
 #endif
@@ -279,7 +306,7 @@ void NewPing::timer_setup() {
 	ASSR &= ~(1<<AS2);            // Set clock, not pin.
 	TCCR2 = (1<<WGM21 | 1<<CS22); // Set Timer2 to CTC mode, prescaler to 64 (4uS/count, 4uS-1020uS range).
 	TCNT2 = 0;                    // Reset Timer2 counter.
-#elif defined (__arm__) && defined (TEENSYDUINO)
+#elif (defined (__arm__) && defined (TEENSYDUINO)) || defined (ARDUINO_SAM_DUE)
 	timer_stop(); // Stop the timer.
 #else
 	timer_stop();        // Disable Timer2 interrupt.
@@ -300,15 +327,19 @@ void NewPing::timer_ms_cntdwn() {
 
 #if defined (__AVR_ATmega32U4__) // Use Timer4 for ATmega32U4 (Teensy/Leonardo).
 ISR(TIMER4_OVF_vect) {
-#elif defined (__AVR_ATmega8__) // ATmega8 microcontrollers.
-ISR(TIMER2_COMP_vect) {
-#elif defined (__arm__) && defined (TEENSYDUINO) // Teensy 3.x
-static void unusedfunction() {
-#else
-ISR(TIMER2_COMPA_vect) {
-#endif
 	intFunc(); // Call wrapped function.
 }
+#elif defined (__AVR_ATmega8__) // ATmega8 microcontrollers.
+ISR(TIMER2_COMP_vect) {
+	intFunc(); // Call wrapped function.
+}
+#elif defined (__arm__)
+// Do nothing...
+#else
+ISR(TIMER2_COMPA_vect) {
+	intFunc(); // Call wrapped function.
+}
+#endif
 
 
 #endif

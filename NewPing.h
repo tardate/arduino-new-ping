@@ -59,7 +59,7 @@
 // *NOT FINISHED* - Added new ping_interrupt() method which uses external pin interrupt to measure distance with no polling overhead.
 // Corrected delay between pings when using ping_median() method.
 // Added support for the URM37 sensor (must change URM37_ENABLED from false to true).
-// Added support for Arduino DUE and other non-AVR microcontrollers like the $19 32 bit ARM Cortex-M4 based Teensy 3.1.
+// Added support for Arduino DUE and other non-AVR microcontrollers like the $19 32 bit ARM Cortex-M4 based Teensy 3.1 (DUE doesn't support timer methods).
 // Added automatic support for the Atmel ATtiny family of microcontrollers.
 // Added timer support for the ATmega8 microcontroller.
 // Rounding disabled by default, reduces compiled code size (can be turned on with ROUNDING_ENABLED switch).
@@ -115,14 +115,14 @@
 #ifndef NewPing_h
 #define NewPing_h
 
-#if defined(ARDUINO) && ARDUINO >= 100
+#if defined (ARDUINO) && ARDUINO >= 100
 	#include <Arduino.h>
 #else
 	#include <WProgram.h>
 	#include <pins_arduino.h>
 #endif
 
-#if defined(__AVR__)
+#if defined (__AVR__)
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
 #endif
@@ -154,7 +154,7 @@
 #define NewPingConvert(echoTime, conversionFactor) (max(((unsigned int)echoTime + conversionFactor / 2) / conversionFactor, (echoTime ? 1 : 0)))
 
 // Detect non-AVR microcontrollers (Teensy 3.x, Arduino DUE, etc.) and don't use port registers or timer interrupts as required.
-#if defined (__arm__) && defined (TEENSYDUINO)
+#if (defined (__arm__) && defined (TEENSYDUINO))
 	#undef  PING_OVERHEAD
 	#define PING_OVERHEAD 1
 	#undef  PING_TIMER_OVERHEAD
@@ -201,7 +201,8 @@ class NewPing {
 		static void timer_stop();
 #endif
 	private:
-		boolean ping_trigger(boolean interrupt = false);
+		boolean ping_trigger();
+//		boolean ping_trigger(boolean interrupt = false);
 //		void ping_interrupt2();
 #if TIMER_ENABLED == true
 		boolean ping_trigger_timer(unsigned int trigger_delay);
@@ -215,9 +216,14 @@ class NewPing {
 #endif
 		uint8_t _triggerBit;
 		uint8_t _echoBit;
+#if defined (ARDUINO_SAM_DUE)
+		volatile long unsigned int *_triggerOutput;
+		volatile long unsigned int *_echoInput;
+#else
 		volatile uint8_t *_triggerOutput;
 		volatile uint8_t *_echoInput;
 		volatile uint8_t *_triggerMode;
+#endif
 		unsigned int _maxEchoTime;
 		unsigned long _max_time;
 };
