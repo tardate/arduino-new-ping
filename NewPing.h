@@ -55,7 +55,10 @@
 //   NewPing::timer_stop() - Stop the timer.
 //
 // HISTORY:
-// 09/29/2015 v1.7 - Possible Due support added.
+// 09/29/2015 v1.7 - Removed support for the Arduino Due and Zero because
+//   they're both 3.3 volt boards and are not 5 volt tolerant while the HC-SR04
+//   is a 5 volt sensor.  Also, the Due and Zero don't support pin manipulation
+//   compatibility via port registers which can be done (see the Teensy 3.2).
 //
 // 06/17/2014 v1.6 - Corrected delay between pings when using ping_median()
 //   method. Added support for the URM37 sensor (must change URM37_ENABLED from
