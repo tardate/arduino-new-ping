@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// NewPing Library - v1.6 pre-release - 06/17/2014
+// NewPing Library - v1.7 - 09/29/2015
 //
 // AUTHOR/LICENSE:
 // Created by Tim Eckel - teckel@leethost.com
-// Copyright 2014 License: GNU GPL v3 http://www.gnu.org/licenses/gpl.html
+// Copyright 2015 License: GNU GPL v3 http://www.gnu.org/licenses/gpl.html
 //
 // LINKS:
-// Project home: http://code.google.com/p/arduino-new-ping/
+// Project home: https://bitbucket.org/teckel12/arduino-new-ping/wiki/Home
 // Blog: http://arduino.cc/forum/index.php/topic,106043.0.html
 //
 // DISCLAIMER:
@@ -55,16 +55,19 @@
 //   NewPing::timer_stop() - Stop the timer.
 //
 // HISTORY:
-// 06/17/2014 v1.6 pre-release -
-// *NOT FINISHED* - Added new ping_interrupt() method which uses external pin interrupt to measure distance with no polling overhead.
-// Corrected delay between pings when using ping_median() method.
-// Added support for the URM37 sensor (must change URM37_ENABLED from false to true).
-// Added support for Arduino DUE and other non-AVR microcontrollers like the $19 32 bit ARM Cortex-M4 based Teensy 3.1.
-// Added automatic support for the Atmel ATtiny family of microcontrollers.
-// Added timer support for the ATmega8 microcontroller.
-// Rounding disabled by default, reduces compiled code size (can be turned on with ROUNDING_ENABLED switch).
-// Added TIMER_ENABLED switch to get around compile-time "__vector_7" errors when using the Tone library, or you can use the toneAC, NewTone or TimerFreeTone libraries (http://code.google.com/p/arduino-tone-ac).
-// Other speed and compiled size optimizations.
+// 09/29/2015 v1.7 - Possible Due support added.
+//
+// 06/17/2014 v1.6 - Corrected delay between pings when using ping_median()
+//   method. Added support for the URM37 sensor (must change URM37_ENABLED from
+//   false to true). Added support for Arduino microcontrollers like the $20
+//   32 bit ARM Cortex-M4 based Teensy 3.2. Added automatic support for the
+//   Atmel ATtiny family of microcontrollers. Added timer support for the
+//   ATmega8 microcontroller. Rounding disabled by default, reduces compiled
+//   code size (can be turned on with ROUNDING_ENABLED switch). Added
+//   TIMER_ENABLED switch to get around compile-time "__vector_7" errors when
+//   using the Tone library, or you can use the toneAC, NewTone or
+//   TimerFreeTone libraries: https://bitbucket.org/teckel12/arduino-toneac/
+//   Other speed and compiled size optimizations.
 //
 // 08/15/2012 v1.5 - Added ping_median() method which does a user specified
 //   number of pings (default=5) and returns the median ping in microseconds
@@ -115,14 +118,14 @@
 #ifndef NewPing_h
 #define NewPing_h
 
-#if defined(ARDUINO) && ARDUINO >= 100
+#if defined (ARDUINO) && ARDUINO >= 100
 	#include <Arduino.h>
 #else
 	#include <WProgram.h>
 	#include <pins_arduino.h>
 #endif
 
-#if defined(__AVR__)
+#if defined (__AVR__)
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
 #endif
@@ -154,7 +157,7 @@
 #define NewPingConvert(echoTime, conversionFactor) (max(((unsigned int)echoTime + conversionFactor / 2) / conversionFactor, (echoTime ? 1 : 0)))
 
 // Detect non-AVR microcontrollers (Teensy 3.x, Arduino DUE, etc.) and don't use port registers or timer interrupts as required.
-#if defined (__arm__) && defined (TEENSYDUINO)
+#if (defined (__arm__) && defined (TEENSYDUINO))
 	#undef  PING_OVERHEAD
 	#define PING_OVERHEAD 1
 	#undef  PING_TIMER_OVERHEAD
@@ -188,8 +191,6 @@ class NewPing {
 		unsigned long ping_cm();
 		unsigned long ping_in();
 		unsigned long ping_median(uint8_t it = 5);
-//		void ping_interrupt(void (*userFunc)(void));
-//		unsigned int get_interrupt();
 		unsigned int convert_cm(unsigned int echoTime);
 		unsigned int convert_in(unsigned int echoTime);
 #if TIMER_ENABLED == true
@@ -201,17 +202,12 @@ class NewPing {
 		static void timer_stop();
 #endif
 	private:
-		boolean ping_trigger(boolean interrupt = false);
-//		void ping_interrupt2();
+		boolean ping_trigger();
 #if TIMER_ENABLED == true
 		boolean ping_trigger_timer(unsigned int trigger_delay);
 		boolean ping_wait_timer();
 		static void timer_setup();
 		static void timer_ms_cntdwn();
-#endif
-//		uint8_t _echoPinInt;
-#ifndef __AVR__
-		uint8_t _triggerPin;
 #endif
 		uint8_t _triggerBit;
 		uint8_t _echoBit;

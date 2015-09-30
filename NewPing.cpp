@@ -1,6 +1,6 @@
 // ---------------------------------------------------------------------------
 // Created by Tim Eckel - teckel@leethost.com
-// Copyright 2014 License: GNU GPL v3 http://www.gnu.org/licenses/gpl.html
+// Copyright 2015 License: GNU GPL v3 http://www.gnu.org/licenses/gpl.html
 //
 // See "NewPing.h" for purpose, syntax, version history, links, and more.
 // ---------------------------------------------------------------------------
@@ -13,8 +13,6 @@
 // ---------------------------------------------------------------------------
 
 NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_distance) {
-	//_echoPinInt = echo_pin; // Assign the echo pin/interrupt.
-
 	_triggerBit = digitalPinToBitMask(trigger_pin); // Get the port register bitmask for the trigger pin.
 	_echoBit = digitalPinToBitMask(echo_pin);       // Get the port register bitmask for the echo pin.
 
@@ -24,15 +22,18 @@ NewPing::NewPing(uint8_t trigger_pin, uint8_t echo_pin, unsigned int max_cm_dist
 	_triggerMode = (uint8_t *) portModeRegister(digitalPinToPort(trigger_pin)); // Get the port mode register for the trigger pin.
 
 #if ROUNDING_ENABLED == false
-	_maxEchoTime = min(max_cm_distance + 1, MAX_SENSOR_DISTANCE + 1) * US_ROUNDTRIP_CM; // Calculate the maximum distance in uS (no rounding).
+	_maxEchoTime = min(max_cm_distance + 1, (unsigned int) MAX_SENSOR_DISTANCE + 1) * US_ROUNDTRIP_CM; // Calculate the maximum distance in uS (no rounding).
 #else
-	_maxEchoTime = min(max_cm_distance, MAX_SENSOR_DISTANCE) * US_ROUNDTRIP_CM + (US_ROUNDTRIP_CM / 2); // Calculate the maximum distance in uS.
+	_maxEchoTime = min(max_cm_distance, (unsigned int) MAX_SENSOR_DISTANCE) * US_ROUNDTRIP_CM + (US_ROUNDTRIP_CM / 2); // Calculate the maximum distance in uS.
 #endif
 
-#ifndef __AVR__
-	_triggerPin = trigger_pin;    // Assign the trigger pin.
+#if defined (__arm__) && defined (TEENSYDUINO)
 	pinMode(echo_pin, INPUT);     // Set echo pin to input (on Teensy 3.x (ARM), pins default to disabled, at least one pinMode() is needed for GPIO mode).
 	pinMode(trigger_pin, OUTPUT); // Set trigger pin to output (on Teensy 3.x (ARM), pins default to disabled, at least one pinMode() is needed for GPIO mode).
+#endif
+
+#if defined (ARDUINO_AVR_YUN)
+	pinMode(echo_pin, INPUT);     // Set echo pin to input on the Arduino Yun, not sure why it doesn't default this way.
 #endif
 
 #if ONE_PIN_ENABLED != true
@@ -107,31 +108,11 @@ unsigned long NewPing::ping_median(uint8_t it) {
 }
 
 
-/* NOT FINISHED - WORK TO BE DONE HERE
-// Variable used for ping_interrupt function
-void (*intFunc3)();
-
-void NewPing::ping_interrupt(void (*userFunc)(void)) {
-	detachInterrupt(_echoPinInt);
-	intFunc3 = userFunc;
-	
-	if (!ping_trigger(true)) return; // Trigger a ping, if it returns false, return without starting the echo interrupt.
-
-	attachInterrupt(_echoPinInt, NewPing::ping_interrupt2, RISING);
-}
-
-void NewPing::ping_interrupt2() {
-	_max_time = micros() + _maxEchoTime; // Ping started, set the timeout.
-	attachInterrupt(_echoPinInt, intFunc3, FALLING);
-}
-*/
-
-
 // ---------------------------------------------------------------------------
 // Standard and timer interrupt ping method support function (not called directly)
 // ---------------------------------------------------------------------------
 
-boolean NewPing::ping_trigger(boolean interrupt) {
+boolean NewPing::ping_trigger() {
 #if ONE_PIN_ENABLED == true
 	*_triggerMode |= _triggerBit; // Set trigger pin to output.
 #endif
@@ -146,30 +127,21 @@ boolean NewPing::ping_trigger(boolean interrupt) {
 	*_triggerMode &= ~_triggerBit; // Set trigger pin to input (when using one Arduino pin this is technically setting the echo pin to input as both are tied to the same Arduino pin).
 #endif
 
-	if (interrupt) return true;
-
 #if URM37_ENABLED == true
-	if (!(*_echoInput & _echoBit)) return false;            // Previuos ping hasn't finished, abort.
+	if (!(*_echoInput & _echoBit)) return false;            // Previous ping hasn't finished, abort.
 	_max_time = micros() + _maxEchoTime + MAX_SENSOR_DELAY; // Maximum time we'll wait for ping to start (most sensors are <450uS, the SRF06 can take up to 34,300uS!)
 	while (*_echoInput & _echoBit)                          // Wait for ping to start.
 		if (micros() > _max_time) return false;               // Took too long to start, abort.
 #else
-	if (*_echoInput & _echoBit) return false;               // Previuos ping hasn't finished, abort.
+	if (*_echoInput & _echoBit) return false;               // Previous ping hasn't finished, abort.
 	_max_time = micros() + _maxEchoTime + MAX_SENSOR_DELAY; // Maximum time we'll wait for ping to start (most sensors are <450uS, the SRF06 can take up to 34,300uS!)
 	while (!(*_echoInput & _echoBit))                       // Wait for ping to start.
 		if (micros() > _max_time) return false;               // Took too long to start, abort.
 #endif
 
-	_max_time = micros() + _maxEchoTime; // Ping started, set the timeout.
+	_max_time = micros() + _maxEchoTime; // Ping started, set the time-out.
 	return true;                         // Ping started successfully.
 }
-
-/* NOT FINISHED - WORK TO BE DONE HERE
-unsigned int NewPing::get_interrupt() {
-	detachInterrupt(_echoPinInt);
-	return (micros() - (_max_time - _maxEchoTime) - PING_OVERHEAD); // Calculate ping time, include overhead.
-}
-*/
 
 
 #if TIMER_ENABLED == true
@@ -185,7 +157,7 @@ void NewPing::ping_timer(void (*userFunc)(void)) {
 
 
 boolean NewPing::check_timer() {
-	if (micros() > _max_time) { // Outside the timeout limit.
+	if (micros() > _max_time) { // Outside the time-out limit.
 		timer_stop();             // Disable timer interrupt
 		return false;             // Cancel ping timer.
 	}
@@ -300,15 +272,19 @@ void NewPing::timer_ms_cntdwn() {
 
 #if defined (__AVR_ATmega32U4__) // Use Timer4 for ATmega32U4 (Teensy/Leonardo).
 ISR(TIMER4_OVF_vect) {
-#elif defined (__AVR_ATmega8__) // ATmega8 microcontrollers.
-ISR(TIMER2_COMP_vect) {
-#elif defined (__arm__) && defined (TEENSYDUINO) // Teensy 3.x
-static void unusedfunction() {
-#else
-ISR(TIMER2_COMPA_vect) {
-#endif
 	intFunc(); // Call wrapped function.
 }
+#elif defined (__AVR_ATmega8__) // ATmega8 microcontrollers.
+ISR(TIMER2_COMP_vect) {
+	intFunc(); // Call wrapped function.
+}
+#elif defined (__arm__)
+// Do nothing...
+#else
+ISR(TIMER2_COMPA_vect) {
+	intFunc(); // Call wrapped function.
+}
+#endif
 
 
 #endif
