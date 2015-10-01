@@ -55,7 +55,6 @@
 //   NewPing::timer_stop() - Stop the timer.
 //
 // HISTORY:
-<<<<<<< HEAD
 // 09/29/2015 v1.7 - Removed support for the Arduino Due and Zero because
 //   they're both 3.3 volt boards and are not 5 volt tolerant while the HC-SR04
 //   is a 5 volt sensor.  Also, the Due and Zero don't support pin manipulation
@@ -72,18 +71,6 @@
 //   using the Tone library, or you can use the toneAC, NewTone or
 //   TimerFreeTone libraries: https://bitbucket.org/teckel12/arduino-toneac/
 //   Other speed and compiled size optimizations.
-=======
-// 06/17/2014 v1.6 pre-release -
-// *NOT FINISHED* - Added new ping_interrupt() method which uses external pin interrupt to measure distance with no polling overhead.
-// Corrected delay between pings when using ping_median() method.
-// Added support for the URM37 sensor (must change URM37_ENABLED from false to true).
-// Added support for Arduino DUE and other non-AVR microcontrollers like the $19 32 bit ARM Cortex-M4 based Teensy 3.1 (DUE doesn't support timer methods).
-// Added automatic support for the Atmel ATtiny family of microcontrollers.
-// Added timer support for the ATmega8 microcontroller.
-// Rounding disabled by default, reduces compiled code size (can be turned on with ROUNDING_ENABLED switch).
-// Added TIMER_ENABLED switch to get around compile-time "__vector_7" errors when using the Tone library, or you can use the toneAC, NewTone or TimerFreeTone libraries (http://code.google.com/p/arduino-tone-ac).
-// Other speed and compiled size optimizations.
->>>>>>> origin/master
 //
 // 08/15/2012 v1.5 - Added ping_median() method which does a user specified
 //   number of pings (default=5) and returns the median ping in microseconds
@@ -219,11 +206,6 @@ class NewPing {
 #endif
 	private:
 		boolean ping_trigger();
-<<<<<<< HEAD
-=======
-//		boolean ping_trigger(boolean interrupt = false);
-//		void ping_interrupt2();
->>>>>>> origin/master
 #if TIMER_ENABLED == true
 		boolean ping_trigger_timer(unsigned int trigger_delay);
 		boolean ping_wait_timer();
@@ -232,14 +214,9 @@ class NewPing {
 #endif
 		uint8_t _triggerBit;
 		uint8_t _echoBit;
-#if defined (ARDUINO_SAM_DUE)
-		volatile long unsigned int *_triggerOutput;
-		volatile long unsigned int *_echoInput;
-#else
 		volatile uint8_t *_triggerOutput;
 		volatile uint8_t *_echoInput;
 		volatile uint8_t *_triggerMode;
-#endif
 		unsigned int _maxEchoTime;
 		unsigned long _max_time;
 };
